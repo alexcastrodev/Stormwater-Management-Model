@@ -6,6 +6,7 @@
 
 add_executable(test_solver
     test_solver.cpp
+    fill_malloc.c
     )
 target_include_directories(test_solver
     PUBLIC ../../src/solver/include ../../src/outfile/include

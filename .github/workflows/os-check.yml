@@ -1,0 +1,55 @@
+name: OS check (temporary)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ ci/windows-check ]
+
+jobs:
+  test:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest ]
+    env:
+      OMP_NUM_THREADS: 1
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Boost.Test (Linux)
+      if: runner.os == 'Linux'
+      run: sudo apt-get update && sudo apt-get install -y libboost-test-dev
+
+    - name: Boost.Test and OpenMP (macOS)
+      if: runner.os == 'macOS'
+      run: brew install boost libomp
+
+    - name: Boost.Test (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: vcpkg install boost-test:x64-windows-static-md
+
+    - name: Configure (Linux)
+      if: runner.os == 'Linux'
+      run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON
+
+    - name: Configure (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        OMP=$(brew --prefix libomp)
+        cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON \
+          "-DOpenMP_C_FLAGS=-Xpreprocessor -fopenmp -I$OMP/include" \
+          -DOpenMP_C_LIB_NAMES=omp -DOpenMP_omp_LIBRARY=$OMP/lib/libomp.dylib
+
+    - name: Configure (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: cmake -B build -DBUILD_TESTS=ON "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows-static-md
+
+    - name: Build
+      run: cmake --build build --config Debug -j 4
+
+    - name: Test (new tests; the older test_output is registered with a path that does not exist on single-config builds)
+      run: ctest --test-dir build -C Debug -R test_solver --output-on-failure
